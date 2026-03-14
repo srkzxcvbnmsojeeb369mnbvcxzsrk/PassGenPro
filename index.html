@@ -565,7 +565,7 @@
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-200 flex items-center justify-center min-h-screen md:p-4 overflow-x-hidden">
 
     <!-- Splash Screen -->
-    <div id="splash-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 transition-opacity duration-500">
+    <div id="splash-screen" style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0f172a;transition:opacity 0.5s ease;">
         <div class="text-center">
             <h1 class="text-4xl font-bold bg-gradient-to-r from-indigo-500 to-violet-600 dark:from-indigo-400 dark:to-violet-500 text-transparent bg-clip-text">PassGen Pro</h1>
             <p class="text-gray-500 dark:text-gray-400 mt-2">Powered by ͟͞〲Sojeeb </p>
@@ -576,7 +576,7 @@
     </div>
 
     <!-- Main App Container -->
-    <div id="app-container" class="w-full min-h-screen md:min-h-0 md:w-full md:max-w-md bg-white dark:bg-gray-800 md:rounded-2xl md:shadow-2xl p-6 md:p-8 relative transition-colors duration-200 opacity-0 overflow-x-hidden">
+    <div id="app-container" class="w-full min-h-screen md:min-h-0 md:w-full md:max-w-md bg-white dark:bg-gray-800 md:rounded-2xl md:shadow-2xl p-6 md:p-8 relative overflow-x-hidden" style="opacity:0;transition:opacity 0.5s ease;">
         
         <div class="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
             <div class="relative">
@@ -1710,7 +1710,7 @@
                     </svg>
                 </button>
             </div>
-            <div class="p-6 space-y-6">
+            <div class="p-6 space-y-5 overflow-y-auto" style="max-height:80vh;">
                 <div>
                     <label for="languageSelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Language</label>
                     <select id="languageSelect"
@@ -1718,6 +1718,27 @@
                         <option value="en" selected>English</option>
                         <option value="bn" disabled>Bangla (Coming Soon)</option>
                     </select>
+                </div>
+
+                <!-- ✨ AI Model Selector -->
+                <div class="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden">
+                    <div class="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-500 to-indigo-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                        <span class="text-white font-semibold text-sm">AI Model</span>
+                        <span id="aiModelBadge" class="ml-auto text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">DeepSeek</span>
+                    </div>
+                    <div class="p-4">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">AI Memorable Password generation এ কোন AI ব্যবহার হবে সেটা বেছে নাও। Keys Netlify Environment এ set করতে হবে।</p>
+                        <select id="aiModelSelect" onchange="saveAiModel(this.value)"
+                            class="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg p-2.5 outline-none">
+                            <option value="deepseek">🤖 DeepSeek (সবচেয়ে দ্রুত)</option>
+                            <option value="gemini">✨ Google Gemini</option>
+                            <option value="openai">💬 ChatGPT (GPT-4o mini)</option>
+                            <option value="auto">⚡ Auto (সব try করে)</option>
+                        </select>
+                    </div>
                 </div>
 
 
@@ -1793,27 +1814,17 @@
             const splashScreen = document.getElementById('splash-screen');
             const appContainer = document.getElementById('app-container');
 
-            setTimeout(() => {
+            function hideSplash() {
                 splashScreen.style.opacity = '0';
+                splashScreen.style.pointerEvents = 'none';
                 appContainer.style.opacity = '1';
-                
-                setTimeout(() => {
-                    splashScreen.style.display = 'none';
-                }, 500);
-            }, 2500);
-
-            // Service Worker Registration
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register('sw.js')
-                        .then(registration => {
-                            console.log('Service Worker registered with scope:', registration.scope);
-                        })
-                        .catch(error => {
-                            console.error('Service Worker registration failed:', error);
-                        });
-                });
+                setTimeout(function() { splashScreen.style.display = 'none'; }, 600);
             }
+            var splashTimer = setTimeout(hideSplash, 2000);
+            window.addEventListener('load', function() {
+                clearTimeout(splashTimer);
+                setTimeout(hideSplash, 400);
+            });
 
             // --- Storage Keys ---
             const PASSWORD_STORAGE_KEY = 'savedPasswordGenPassword';
@@ -2000,9 +2011,7 @@
             let currentBmiUnit = 'metric'; 
             let currentGender = 'male'; // 'male' or 'female'
             
-            // DeepSeek API Key
-            const DEEPSEEK_API_KEY = 'sk-7e4d2be897ea4bc2afb954ed43b2e3ba';
-            const GEMINI_API_KEY = 'AIzaSyD3dm4IVQwB831Tzill3yY-k_GMFmlrzQo';
+            // ✅ API keys removed from code — stored securely via Netlify Function
             
             // --- Image Resizer State ---
             let originalImage = null;
@@ -2063,124 +2072,54 @@
                 'omega', 'pulse', 'quartz', 'radar', 'solar', 'tetra', 'ultra', 'vector', 'wave', 'zulu'
             ];
 
-            // --- FIXED DeepSeek API Call Function ---
-            async function callDeepSeek(prompt) {
-                const apiUrl = 'https://api.deepseek.com/v1/chat/completions';
-                
-                const payload = {
-                    model: 'deepseek-chat',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a helpful AI assistant. Provide clear, concise, and accurate responses.'
-                        },
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 500,
-                    top_p: 0.95,
-                    frequency_penalty: 0,
-                    presence_penalty: 0
-                };
+            // ═══════════════════════════════════════════════════════
+            // SECURE AI PROXY — DeepSeek + ChatGPT + Gemini
+            // API keys are stored in Netlify Environment Variables
+            // HTML এ কোনো key নেই — সম্পূর্ণ secure ✅
+            // ═══════════════════════════════════════════════════════
 
-                try {
-                    console.log("Sending request to DeepSeek API...");
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('DeepSeek API Response Error:', response.status, errorText);
-                        
-                        if (response.status === 401) {
-                            throw new Error("Invalid API key. Please check your DeepSeek API key.");
-                        } else if (response.status === 429) {
-                            throw new Error("Rate limit exceeded. Please try again later.");
-                        } else if (response.status === 500) {
-                            throw new Error("DeepSeek server error. Please try again.");
-                        } else {
-                            throw new Error(`API request failed with status: ${response.status}`);
-                        }
-                    }
-                    
-                    const result = await response.json();
-                    console.log("DeepSeek API Response:", result);
-                    
-                    if (result.choices && result.choices[0] && result.choices[0].message) {
-                        const content = result.choices[0].message.content;
-                        const tokens = result.usage?.total_tokens || 0;
-                        return { content, tokens };
-                    } else {
-                        console.error('Unexpected API response structure:', result);
-                        throw new Error("Unexpected response format from DeepSeek service.");
-                    }
-                    
-                } catch (error) {
-                    console.error('DeepSeek API call failed:', error);
-                    throw error;
+            // DeepSeek — Netlify Function এর মাধ্যমে call হবে
+            async function callDeepSeek(prompt) {
+                const res = await fetch('/.netlify/functions/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, model: 'deepseek' })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    if (res.status === 401) throw new Error('Invalid DeepSeek API key in Netlify settings.');
+                    if (res.status === 429) throw new Error('Rate limit exceeded. Try again later.');
+                    throw new Error(err.error || 'DeepSeek request failed: ' + res.status);
                 }
+                return await res.json();
             }
 
-            // --- FIXED Gemini API Call Function (Fallback) ---
+            // Gemini — Netlify Function এর মাধ্যমে call হবে
             async function callGemini(prompt) {
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-                
-                const payload = {
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }],
-                    generationConfig: {
-                        temperature: 0.7,
-                        topK: 40,
-                        topP: 0.95,
-                        maxOutputTokens: 500,
-                    }
-                };
-
-                try {
-                    console.log("Sending request to Gemini API (fallback)...");
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('Gemini API Response Error:', response.status, errorText);
-                        throw new Error(`Gemini API failed with status: ${response.status}`);
-                    }
-                    
-                    const result = await response.json();
-                    
-                    if (result.candidates && 
-                        result.candidates[0] && 
-                        result.candidates[0].content && 
-                        result.candidates[0].content.parts && 
-                        result.candidates[0].content.parts[0]) {
-                        const text = result.candidates[0].content.parts[0].text;
-                        return { content: text.trim(), tokens: 0 };
-                    } else {
-                        throw new Error("Unexpected response format from Gemini service.");
-                    }
-                    
-                } catch (error) {
-                    console.error('Gemini API call failed:', error);
-                    throw error;
+                const res = await fetch('/.netlify/functions/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, model: 'gemini' })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'Gemini request failed: ' + res.status);
                 }
+                return await res.json();
+            }
+
+            // ChatGPT / OpenAI — Netlify Function এর মাধ্যমে call হবে
+            async function callOpenAI(prompt) {
+                const res = await fetch('/.netlify/functions/ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, model: 'openai' })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'ChatGPT request failed: ' + res.status);
+                }
+                return await res.json();
             }
 
             // --- AI Generation Function ---
@@ -2786,10 +2725,23 @@
                 try {
                     console.log(`Generating AI memorable password with ${numWords} words...`);
                     let response;
+                    const _model = localStorage.getItem('aiModel') || 'deepseek';
                     try {
-                        response = await callDeepSeek(prompt);
+                        if (_model === 'gemini') {
+                            response = await callGemini(prompt);
+                        } else if (_model === 'openai') {
+                            response = await callOpenAI(prompt);
+                        } else if (_model === 'auto') {
+                            try { response = await callDeepSeek(prompt); }
+                            catch { try { response = await callGemini(prompt); }
+                            catch { response = await callOpenAI(prompt); } }
+                        } else {
+                            response = await callDeepSeek(prompt);
+                        }
                     } catch (error) {
-                        response = await callGemini(prompt);
+                        // fallback chain
+                        try { response = await callGemini(prompt); }
+                        catch { response = await callDeepSeek(prompt); }
                     }
                     
                     if (!response || !response.content) {
@@ -4154,6 +4106,7 @@
             openSettingsButton.addEventListener('click', (e) => {
                 e.stopPropagation();
                 showModal(settingsModal);
+                loadAiModel();
                 themeMenu.classList.add('hidden');
             });
 
@@ -4204,6 +4157,27 @@
             if (savedPassword) {
                 passwordResult.value = savedPassword;
             }
+
+            // ── AI Model Save/Load ──────────────────────────────────
+            function saveAiModel(val) {
+                localStorage.setItem('aiModel', val);
+                const badge = document.getElementById('aiModelBadge');
+                const labels = {
+                    deepseek: 'DeepSeek',
+                    gemini: 'Gemini',
+                    openai: 'ChatGPT',
+                    auto: 'Auto'
+                };
+                if (badge) badge.textContent = labels[val] || val;
+            }
+
+            function loadAiModel() {
+                const saved = localStorage.getItem('aiModel') || 'deepseek';
+                const sel = document.getElementById('aiModelSelect');
+                if (sel) sel.value = saved;
+                saveAiModel(saved);
+            }
+
             loadHistory(); 
             loadAgeHistory();
             loadBmiHistory();
