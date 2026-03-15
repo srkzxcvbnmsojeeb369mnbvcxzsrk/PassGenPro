@@ -2125,7 +2125,7 @@
             // --- AI Generation Function ---
 
             // --- Google Drive Sync Functions ---
-            const GOOGLE_CLIENT_ID = "1028667926374-6kf1cior1s0fnfhljlp249qba0vu6kga.apps.googleusercontent.com";
+            const GOOGLE_CLIENT_ID = "533061052888-7gdp25il429srdlfs9g6ul3f5c0nfsjg.apps.googleusercontent.com";
             // ✅ drive.appdata — appDataFolder access এর জন্য দরকার
             const GOOGLE_SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata";
             const BACKUP_FILE_PREFIX = 'password_tools_backup';
@@ -2135,20 +2135,31 @@
             // ✅ FIX 1: Proper script loading — callback দিয়ে token নেওয়া হয়
             function loadGsiScript() {
                 return new Promise((resolve, reject) => {
-                    if (gsiScriptLoaded && typeof google !== 'undefined') {
+                    // ✅ google object আগে থেকেই থাকলে সরাসরি resolve
+                    if (typeof google !== 'undefined' && google.accounts) {
+                        gsiScriptLoaded = true;
                         resolve();
                         return;
                     }
+                    // Script আগে থেকে আছে কিন্তু load হয়নি
                     const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
                     if (existing) {
-                        existing.addEventListener('load', () => { gsiScriptLoaded = true; resolve(); });
-                        existing.addEventListener('error', reject);
+                        // ইতোমধ্যে load হয়ে গেলে event fire হবে না, তাই poll করো
+                        const check = setInterval(() => {
+                            if (typeof google !== 'undefined' && google.accounts) {
+                                clearInterval(check);
+                                gsiScriptLoaded = true;
+                                resolve();
+                            }
+                        }, 100);
+                        setTimeout(() => { clearInterval(check); reject(new Error('GSI script timeout')); }, 10000);
                         return;
                     }
+                    // নতুন script load করো
                     const script = document.createElement('script');
                     script.src = 'https://accounts.google.com/gsi/client';
                     script.onload = () => { gsiScriptLoaded = true; resolve(); };
-                    script.onerror = reject;
+                    script.onerror = () => reject(new Error('Failed to load Google Sign-In script'));
                     document.head.appendChild(script);
                 });
             }
@@ -2157,23 +2168,30 @@
             async function getGoogleAccessToken() {
                 await loadGsiScript();
 
-                if (!googleTokenClient) {
-                    googleTokenClient = google.accounts.oauth2.initTokenClient({
-                        client_id: GOOGLE_CLIENT_ID,
-                        scope: GOOGLE_SCOPES,
-                        callback: () => {} // placeholder, নিচে override হবে
-                    });
-                }
-
                 return new Promise((resolve, reject) => {
-                    googleTokenClient.callback = (authResponse) => {
-                        if (authResponse.error) {
-                            reject(new Error('Google Auth failed: ' + authResponse.error));
-                        } else {
-                            resolve(authResponse.access_token);
-                        }
-                    };
-                    googleTokenClient.requestAccessToken({ prompt: '' });
+                    try {
+                        // প্রতিবার নতুন tokenClient তৈরি করো — stale callback এড়াতে
+                        const tokenClient = google.accounts.oauth2.initTokenClient({
+                            client_id: GOOGLE_CLIENT_ID,
+                            scope: GOOGLE_SCOPES,
+                            callback: (authResponse) => {
+                                if (authResponse && authResponse.error) {
+                                    reject(new Error('Google Auth failed: ' + authResponse.error));
+                                } else if (authResponse && authResponse.access_token) {
+                                    resolve(authResponse.access_token);
+                                } else {
+                                    reject(new Error('No access token received'));
+                                }
+                            },
+                            error_callback: (err) => {
+                                // popup_closed_by_user বা access_denied
+                                reject(new Error(err.type || 'Auth popup closed'));
+                            }
+                        });
+                        tokenClient.requestAccessToken({ prompt: '' });
+                    } catch (err) {
+                        reject(err);
+                    }
                 });
             }
 
@@ -4143,7 +4161,8 @@
             }
 
             // ── AI Model Save/Load ──────────────────────────────────
-            function saveAiModel(val) {
+            // ✅ window এ assign করা হয়েছে যাতে HTML onchange থেকে call করা যায়
+            window.saveAiModel = function(val) {
                 localStorage.setItem('aiModel', val);
                 const badge = document.getElementById('aiModelBadge');
                 const labels = {
@@ -4159,7 +4178,7 @@
                 const saved = localStorage.getItem('aiModel') || 'deepseek';
                 const sel = document.getElementById('aiModelSelect');
                 if (sel) sel.value = saved;
-                saveAiModel(saved);
+                window.saveAiModel(saved);
             }
 
             loadHistory(); 
