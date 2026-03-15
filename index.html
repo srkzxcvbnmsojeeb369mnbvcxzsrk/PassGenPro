@@ -2444,13 +2444,41 @@
 
                     onLoginSuccess();
 
-                } catch (err) {
+                    // ✅ Google Sheets এ user save করো
+                    saveUserToSheet(currentUser);
                     loginStatus.textContent = '❌ ' + (err.message || 'Login failed');
                     googleLoginBtn.disabled = false;
                 }
             }
 
-            // ── On Login Success ──
+            // ═══════════════════════════════════════════════════════
+            // GOOGLE SHEETS USER TRACKING
+            // ═══════════════════════════════════════════════════════
+            const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbyjqoeIMAb5eFFYTuxwQm5hNnzCSKsfi2jq4qdGNnD3Z8dBYrJzbwBEBCNNGH5Xj-EPvw/exec';
+
+            async function saveUserToSheet(user) {
+                try {
+                    // Google user ID হিসেবে email hash ব্যবহার করো
+                    const userId = btoa(user.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+
+                    await fetch(SHEETS_API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors', // Apps Script এর জন্য দরকার
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId,
+                            name: user.name,
+                            email: user.email,
+                            picture: user.picture || '',
+                            type: 'login'
+                        })
+                    });
+                    console.log('✅ User tracked in Sheets');
+                } catch (err) {
+                    // Silent fail — tracking error app কে থামাবে না
+                    console.log('Sheet tracking skipped:', err.message);
+                }
+            }
             function onLoginSuccess() {
                 // Hide login screen
                 loginScreen.classList.add('hidden-screen');
