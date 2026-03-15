@@ -2444,8 +2444,10 @@
 
                     onLoginSuccess();
 
-                    // ✅ Google Sheets এ user save করো
-                    saveUserToSheet(currentUser);
+                    // ✅ Google Sheets এ user track করো (background এ, login block করবে না)
+                    setTimeout(() => saveUserToSheet(currentUser), 1000);
+
+                } catch (err) {
                     loginStatus.textContent = '❌ ' + (err.message || 'Login failed');
                     googleLoginBtn.disabled = false;
                 }
