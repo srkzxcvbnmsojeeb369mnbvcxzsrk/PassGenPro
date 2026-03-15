@@ -2126,172 +2126,133 @@
 
             // --- Google Drive Sync Functions ---
             const GOOGLE_CLIENT_ID = "1028667926374-6kf1cior1s0fnfhljlp249qba0vu6kga.apps.googleusercontent.com";
-            const GOOGLE_SCOPES = "https://www.googleapis.com/auth/drive.file";
+            // ✅ drive.appdata — appDataFolder access এর জন্য দরকার
+            const GOOGLE_SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata";
+            const BACKUP_FILE_PREFIX = 'password_tools_backup';
             let googleTokenClient = null;
+            let gsiScriptLoaded = false;
 
-            function initializeGoogleApi() {
+            // ✅ FIX 1: Proper script loading — callback দিয়ে token নেওয়া হয়
+            function loadGsiScript() {
                 return new Promise((resolve, reject) => {
-                    if (googleTokenClient) {
-                        resolve(googleTokenClient);
+                    if (gsiScriptLoaded && typeof google !== 'undefined') {
+                        resolve();
                         return;
                     }
-
+                    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+                    if (existing) {
+                        existing.addEventListener('load', () => { gsiScriptLoaded = true; resolve(); });
+                        existing.addEventListener('error', reject);
+                        return;
+                    }
                     const script = document.createElement('script');
                     script.src = 'https://accounts.google.com/gsi/client';
-                    script.onload = () => {
-                        googleTokenClient = google.accounts.oauth2.initTokenClient({
-                            client_id: GOOGLE_CLIENT_ID,
-                            scope: GOOGLE_SCOPES,
-                            callback: (response) => {
-                                if (response.error) {
-                                    console.error('Google Auth Error:', response);
-                                    reject(response.error);
-                                } else {
-                                    resolve(response.access_token);
-                                }
-                            },
-                        });
-                        resolve(googleTokenClient);
-                    };
+                    script.onload = () => { gsiScriptLoaded = true; resolve(); };
                     script.onerror = reject;
                     document.head.appendChild(script);
                 });
             }
 
-            async function uploadToGoogleDrive(data, filename) {
-                try {
-                    await initializeGoogleApi();
-                    
-                    return new Promise((resolve, reject) => {
-                        googleTokenClient.callback = async (response) => {
-                            if (response.error) {
-                                reject(response.error);
-                                return;
-                            }
+            // ✅ FIX 2: Token সংগ্রহ আলাদা function এ — প্রতিবার fresh token নেওয়া হবে
+            async function getGoogleAccessToken() {
+                await loadGsiScript();
 
-                            const accessToken = response.access_token;
-                            
-                            const metadata = {
-                                name: filename,
-                                mimeType: 'application/json',
-                                parents: ['root']
-                            };
-
-                            const formData = new FormData();
-                            formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                            formData.append('file', new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-
-                            try {
-                                const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${accessToken}`
-                                    },
-                                    body: formData
-                                });
-
-                                if (!uploadResponse.ok) {
-                                    throw new Error(`Upload failed: ${uploadResponse.statusText}`);
-                                }
-
-                                const result = await uploadResponse.json();
-                                resolve(result);
-                            } catch (error) {
-                                reject(error);
-                            }
-                        };
-
-                        googleTokenClient.requestAccessToken();
+                if (!googleTokenClient) {
+                    googleTokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: GOOGLE_CLIENT_ID,
+                        scope: GOOGLE_SCOPES,
+                        callback: () => {} // placeholder, নিচে override হবে
                     });
-                } catch (error) {
-                    throw error;
                 }
+
+                return new Promise((resolve, reject) => {
+                    googleTokenClient.callback = (authResponse) => {
+                        if (authResponse.error) {
+                            reject(new Error('Google Auth failed: ' + authResponse.error));
+                        } else {
+                            resolve(authResponse.access_token);
+                        }
+                    };
+                    googleTokenClient.requestAccessToken({ prompt: '' });
+                });
+            }
+
+            // ✅ FIX 3: parents: ['appDataFolder'] — শুধু এই অ্যাপের data, অন্য কেউ দেখতে পাবে না
+            async function uploadToGoogleDrive(data, filename) {
+                const accessToken = await getGoogleAccessToken();
+
+                const metadata = {
+                    name: filename,
+                    mimeType: 'application/json',
+                    parents: ['appDataFolder']
+                };
+
+                const formData = new FormData();
+                formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                formData.append('file', new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+
+                const uploadResponse = await fetch(
+                    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,createdTime',
+                    {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${accessToken}` },
+                        body: formData
+                    }
+                );
+
+                if (!uploadResponse.ok) {
+                    const errBody = await uploadResponse.text();
+                    throw new Error(`Upload failed (${uploadResponse.status}): ${errBody}`);
+                }
+
+                return await uploadResponse.json();
             }
 
             async function downloadFromGoogleDrive(fileId) {
-                try {
-                    await initializeGoogleApi();
-                    
-                    return new Promise((resolve, reject) => {
-                        googleTokenClient.callback = async (response) => {
-                            if (response.error) {
-                                reject(response.error);
-                                return;
-                            }
+                const accessToken = await getGoogleAccessToken();
 
-                            const accessToken = response.access_token;
-                            
-                            try {
-                                const downloadResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-                                    headers: {
-                                        'Authorization': `Bearer ${accessToken}`
-                                    }
-                                });
+                const downloadResponse = await fetch(
+                    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+                    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+                );
 
-                                if (!downloadResponse.ok) {
-                                    throw new Error(`Download failed: ${downloadResponse.statusText}`);
-                                }
-
-                                const data = await downloadResponse.json();
-                                resolve(data);
-                            } catch (error) {
-                                reject(error);
-                            }
-                        };
-
-                        googleTokenClient.requestAccessToken();
-                    });
-                } catch (error) {
-                    throw error;
+                if (!downloadResponse.ok) {
+                    throw new Error(`Download failed (${downloadResponse.status}): ${downloadResponse.statusText}`);
                 }
+
+                return await downloadResponse.json();
             }
 
+            // ✅ FIX 4: appDataFolder query + variable name conflict ঠিক করা হয়েছে
             async function listGoogleDriveFiles() {
-                try {
-                    await initializeGoogleApi();
-                    
-                    return new Promise((resolve, reject) => {
-                        googleTokenClient.callback = async (response) => {
-                            if (response.error) {
-                                reject(response.error);
-                                return;
-                            }
+                const accessToken = await getGoogleAccessToken();
 
-                            const accessToken = response.access_token;
-                            
-                            try {
-                                const response = await fetch('https://www.googleapis.com/drive/v3/files?q=mimeType="application/json"', {
-                                    headers: {
-                                        'Authorization': `Bearer ${accessToken}`
-                                    }
-                                });
+                const query = encodeURIComponent(`name contains '${BACKUP_FILE_PREFIX}' and trashed = false`);
+                const listResponse = await fetch(
+                    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${query}&orderBy=createdTime+desc&fields=files(id,name,createdTime)`,
+                    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+                );
 
-                                if (!response.ok) {
-                                    throw new Error(`List files failed: ${response.statusText}`);
-                                }
-
-                                const data = await response.json();
-                                resolve(data.files || []);
-                            } catch (error) {
-                                reject(error);
-                            }
-                        };
-
-                        googleTokenClient.requestAccessToken();
-                    });
-                } catch (error) {
-                    throw error;
+                if (!listResponse.ok) {
+                    throw new Error(`List files failed (${listResponse.status}): ${listResponse.statusText}`);
                 }
+
+                const listData = await listResponse.json();
+                return listData.files || [];
             }
 
             async function backupToGoogleDrive() {
+                const btn = document.getElementById('backupToDriveButton');
+                const originalText = btn.innerHTML;
                 try {
+                    // ✅ Loading state
+                    btn.disabled = true;
+                    btn.innerHTML = '<span>⏳ Backing up...</span>';
+
                     const dataToExport = {};
                     ALL_STORAGE_KEYS.forEach(key => {
                         const data = localStorage.getItem(key);
-                        if (data) {
-                            dataToExport[key] = data;
-                        }
+                        if (data) dataToExport[key] = data;
                     });
 
                     if (Object.keys(dataToExport).length === 0) {
@@ -2299,54 +2260,77 @@
                         return;
                     }
 
-                    const timestamp = new Date().toISOString().split('T')[0];
-                    const filename = `password_tools_backup_${timestamp}.json`;
-                    
-                    await uploadToGoogleDrive(dataToExport, filename);
-                    showCopyMessage("Backup to Google Drive successful!");
-                    
+                    // ✅ Timestamp সহ filename
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    const filename = `${BACKUP_FILE_PREFIX}_${timestamp}.json`;
+
+                    const result = await uploadToGoogleDrive(dataToExport, filename);
+                    console.log('✅ Backup successful:', result);
+                    showCopyMessage("✅ Drive backup successful!");
+
                 } catch (error) {
                     console.error("Google Drive backup failed:", error);
-                    showCopyMessage("Backup failed: " + error.message);
+                    // ✅ User-friendly error message
+                    if (error.message.includes('popup')) {
+                        showCopyMessage("Popup blocked! Allow popups for this site.");
+                    } else if (error.message.includes('Auth')) {
+                        showCopyMessage("Google Sign-in cancelled.");
+                    } else {
+                        showCopyMessage("Backup failed: " + error.message.slice(0, 50));
+                    }
+                } finally {
+                    // ✅ Button সবসময় restore হবে
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
                 }
             }
 
             async function restoreFromGoogleDrive() {
+                const btn = document.getElementById('restoreFromDriveButton');
+                const originalText = btn.innerHTML;
                 try {
+                    // ✅ Loading state
+                    btn.disabled = true;
+                    btn.innerHTML = '<span>⏳ Restoring...</span>';
+
                     const files = await listGoogleDriveFiles();
-                    
+
                     if (files.length === 0) {
-                        showCopyMessage("No backup files found in Google Drive!");
+                        showCopyMessage("No backup found in Drive!");
                         return;
                     }
 
-                    const sortedFiles = files.sort((a, b) => 
-                        new Date(b.createdTime) - new Date(a.createdTime)
-                    );
-                    const latestFile = sortedFiles[0];
-                    
+                    // ✅ সবচেয়ে নতুন backup ব্যবহার করো (API already sorted)
+                    const latestFile = files[0];
+                    console.log('📦 Restoring from:', latestFile.name, '|', latestFile.createdTime);
+
                     const importedData = await downloadFromGoogleDrive(latestFile.id);
-                    
+
                     let dataImported = false;
                     ALL_STORAGE_KEYS.forEach(key => {
-                        if (importedData[key]) {
+                        if (importedData[key] !== undefined) {
                             localStorage.setItem(key, importedData[key]);
                             dataImported = true;
                         }
                     });
 
                     if (dataImported) {
-                        showCopyMessage("Restore successful! Reloading...");
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
+                        showCopyMessage("✅ Restore successful! Reloading...");
+                        setTimeout(() => location.reload(), 1500);
                     } else {
-                        showCopyMessage("No relevant data found in backup.");
+                        showCopyMessage("⚠️ Backup file has no matching data.");
                     }
-                    
+
                 } catch (error) {
                     console.error("Google Drive restore failed:", error);
-                    showCopyMessage("Restore failed: " + error.message);
+                    if (error.message.includes('Auth')) {
+                        showCopyMessage("Google Sign-in cancelled.");
+                    } else {
+                        showCopyMessage("Restore failed: " + error.message.slice(0, 50));
+                    }
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
                 }
             }
 
