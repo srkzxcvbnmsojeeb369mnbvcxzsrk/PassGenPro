@@ -2547,8 +2547,6 @@
             // ── Silent Restore (on login) ──
             async function silentRestore() {
                 try {
-                    // ✅ currentUser এর existing token ব্যবহার করো
-                    // নতুন popup খুলবে না
                     if (!currentUser || !currentUser.accessToken) return;
                     const token = currentUser.accessToken;
 
@@ -2564,10 +2562,13 @@
                     });
                     if (restored) {
                         showCopyMessage('✅ Data synced from Drive!');
-                        setTimeout(() => location.reload(), 1500);
+                        // ✅ reload করো না — শুধু history/data refresh করো
+                        loadHistory();
+                        loadAgeHistory();
+                        loadBmiHistory();
                     }
                 } catch (_) {
-                    // Silent fail — no error shown
+                    // Silent fail
                 }
             }
 
@@ -2735,13 +2736,26 @@
                 if (saved) {
                     try {
                         const user = JSON.parse(saved);
-                        currentUser = { ...user, accessToken: null };
-                        onLoginSuccess();
+                        if (user && user.email) {
+                            currentUser = { ...user, accessToken: null };
+                            // ✅ আগেই login screen hide করো
+                            loginScreen.style.display = 'none';
+                            loginScreen.style.pointerEvents = 'none';
+                            loginScreen.classList.add('hidden-screen');
+                            onLoginSuccess();
+                        } else {
+                            localStorage.removeItem('googleUser');
+                            loginScreen.classList.remove('hidden-screen');
+                            loginScreen.style.display = 'flex';
+                        }
                     } catch (_) {
+                        localStorage.removeItem('googleUser');
                         loginScreen.classList.remove('hidden-screen');
+                        loginScreen.style.display = 'flex';
                     }
                 } else {
                     loginScreen.classList.remove('hidden-screen');
+                    loginScreen.style.display = 'flex';
                 }
             }
             checkSavedLogin();
