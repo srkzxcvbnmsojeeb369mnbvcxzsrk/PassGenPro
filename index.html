@@ -2460,25 +2460,25 @@
 
             async function saveUserToSheet(user) {
                 try {
-                    // Google user ID হিসেবে email hash ব্যবহার করো
                     const userId = btoa(user.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+                    const device = navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop';
 
-                    await fetch(SHEETS_API_URL, {
+                    // ✅ ai.js এ saveUser action দিয়ে call করো
+                    await fetch('/.netlify/functions/ai', {
                         method: 'POST',
-                        mode: 'no-cors', // Apps Script এর জন্য দরকার
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
+                            action:  'saveUser',
                             userId,
-                            name: user.name,
-                            email: user.email,
+                            name:    user.name    || '',
+                            email:   user.email   || '',
                             picture: user.picture || '',
-                            type: 'login'
+                            device
                         })
                     });
-                    console.log('✅ User tracked in Sheets');
+                    console.log('✅ User saved to Neon DB');
                 } catch (err) {
-                    // Silent fail — tracking error app কে থামাবে না
-                    console.log('Sheet tracking skipped:', err.message);
+                    console.log('DB tracking skipped:', err.message);
                 }
             }
             function onLoginSuccess() {
