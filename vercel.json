@@ -6,7 +6,14 @@
     }
   },
   "rewrites": [
-    {
+    {{
+  "functions": {
+    "api/*.js": {
+      "memory": 512,
+      "maxDuration": 30
+    }
+  }
+}
       "source": "/api/ai",
       "destination": "/api/ai.js"
     }
