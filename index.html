@@ -576,6 +576,7 @@
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
+            display: none !important;
         }
         .login-card {
             background: rgba(255,255,255,0.07);
@@ -2296,7 +2297,7 @@
 
             // DeepSeek — Netlify Function এর মাধ্যমে call হবে
             async function callDeepSeek(prompt) {
-                const res = await fetch('/.netlify/functions/ai', {
+                const res = await fetch('/api/ai', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt, model: 'deepseek' })
@@ -2312,7 +2313,7 @@
 
             // Gemini — Netlify Function এর মাধ্যমে call হবে
             async function callGemini(prompt) {
-                const res = await fetch('/.netlify/functions/ai', {
+                const res = await fetch('/api/ai', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt, model: 'gemini' })
@@ -2326,7 +2327,7 @@
 
             // ChatGPT / OpenAI — Netlify Function এর মাধ্যমে call হবে
             async function callOpenAI(prompt) {
-                const res = await fetch('/.netlify/functions/ai', {
+                const res = await fetch('/api/ai', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt, model: 'openai' })
@@ -2410,23 +2411,47 @@
 
                     // Step 1: Get access token
                     const accessToken = await new Promise((resolve, reject) => {
+                        let resolved = false;
+
                         const tc = google.accounts.oauth2.initTokenClient({
                             client_id: GOOGLE_CLIENT_ID,
                             scope: GOOGLE_SCOPES + ' https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
                             callback: (res) => {
-                                if (res && res.access_token) resolve(res.access_token);
-                                else reject(new Error(res?.error || 'No token'));
+                                if (resolved) return;
+                                if (res && res.access_token) {
+                                    resolved = true;
+                                    resolve(res.access_token);
+                                } else if (res && res.error) {
+                                    resolved = true;
+                                    reject(new Error(res.error));
+                                }
                             },
-                            error_callback: (err) => reject(new Error(err.type || 'Cancelled'))
+                            error_callback: (err) => {
+                                if (resolved) return;
+                                resolved = true;
+                                reject(new Error(err?.type || 'Login cancelled'));
+                            }
                         });
-                        tc.requestAccessToken({ prompt: 'select_account' });
+
+                        // ✅ prompt: '' — আগে silent try করে, না হলে consent দেখায়
+                        tc.requestAccessToken({ prompt: '' });
                     });
 
                     // Step 2: Get user info
+                    loginStatus.textContent = '⏳ তথ্য নেওয়া হচ্ছে...';
                     const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                         headers: { Authorization: `Bearer ${accessToken}` }
                     });
+
+                    if (!userInfoRes.ok) {
+                        throw new Error('User info fetch failed: ' + userInfoRes.status);
+                    }
+
                     const userInfo = await userInfoRes.json();
+
+                    if (!userInfo.email) {
+                        throw new Error('Google থেকে email পাওয়া যায়নি');
+                    }
 
                     currentUser = {
                         name: userInfo.name || 'User',
@@ -2442,14 +2467,21 @@
                         picture: currentUser.picture
                     }));
 
+                    loginStatus.textContent = '✅ Login সফল!';
                     onLoginSuccess();
 
-                    // ✅ Google Sheets এ user track করো (background এ, login block করবে না)
+                    // Neon DB তে user save করো (background এ)
                     setTimeout(() => saveUserToSheet(currentUser), 1000);
 
                 } catch (err) {
+                    console.error('Login error:', err);
                     loginStatus.textContent = '❌ ' + (err.message || 'Login failed');
                     googleLoginBtn.disabled = false;
+
+                    // ✅ 3 সেকেন্ড পর আবার try করার সুযোগ দাও
+                    setTimeout(() => {
+                        loginStatus.textContent = '';
+                    }, 3000);
                 }
             }
 
@@ -2464,7 +2496,7 @@
                     const device = navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop';
 
                     // ✅ ai.js এ saveUser action দিয়ে call করো
-                    await fetch('/.netlify/functions/ai', {
+                    await fetch('/api/ai', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -2482,8 +2514,10 @@
                 }
             }
             function onLoginSuccess() {
-                // Hide login screen
+                // ✅ Login screen সম্পূর্ণ লুকাও
                 loginScreen.classList.add('hidden-screen');
+                loginScreen.style.display = 'none';
+                loginScreen.style.pointerEvents = 'none';
 
                 // Update header avatar
                 headerAvatar.src = currentUser.picture;
@@ -2513,7 +2547,11 @@
             // ── Silent Restore (on login) ──
             async function silentRestore() {
                 try {
-                    const token = await getGoogleAccessToken();
+                    // ✅ currentUser এর existing token ব্যবহার করো
+                    // নতুন popup খুলবে না
+                    if (!currentUser || !currentUser.accessToken) return;
+                    const token = currentUser.accessToken;
+
                     const files = await listDriveFiles(token);
                     if (files.length === 0) return;
                     const data = await downloadDriveFile(files[0].id, token);
@@ -2640,6 +2678,9 @@
                 stopAutoBackup();
                 accountButton.style.display = 'none';
                 hideModal(accountModal);
+                // ✅ Login screen আবার দেখাও
+                loginScreen.style.display = 'flex';
+                loginScreen.style.pointerEvents = 'auto';
                 loginScreen.classList.remove('hidden-screen');
                 loginStatus.textContent = '';
                 googleLoginBtn.disabled = false;
