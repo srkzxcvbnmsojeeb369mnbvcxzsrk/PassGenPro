@@ -39,16 +39,18 @@ jobs:
       - name: Build Release APK
         run: |
           cd android
-          gradle assembleRelease --no-daemon --stacktrace
-          echo "=== APK files found ==="
-          find . -name "*.apk" -type f
+          gradle assembleRelease --no-daemon 2>&1 | head -80
+
+      - name: Find and upload APK
+        run: |
+          echo "=== Searching for APK ==="
+          find android -name "*.apk" 2>/dev/null || echo "No APK found"
+          find android -name "*.apk" -exec ls -lh {} \;
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PassGenPro-APK
-          path: |
-            android/app/build/outputs/apk/**/*.apk
-            android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
           retention-days: 30
