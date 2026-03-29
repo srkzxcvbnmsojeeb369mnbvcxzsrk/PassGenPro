@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "PassGen Pro - Advanced Password Generator",
   "dependencies": {
+    "@vercel/speed-insights": "^2.0.0",
     "pg": "^8.11.0"
   },
   "engines": {
