@@ -704,6 +704,39 @@
                 <span>Google দিয়ে Login করো</span>
             </button>
             <p id="loginStatus" class="text-gray-500 text-xs mt-4 min-h-[1.2rem]"></p>
+            <!-- Divider -->
+      <div class="flex items-center gap-3 my-5">
+        <div class="flex-1 h-px" style="background:rgba(255,255,255,0.1)"></div>
+        <span class="text-gray-500 text-xs">অথবা Email দিয়ে</span>
+        <div class="flex-1 h-px" style="background:rgba(255,255,255,0.1)"></div>
+      </div>
+      <!-- Tab Switcher -->
+      <div class="flex rounded-xl p-1 mb-4" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1)">
+        <button id="tabLoginBtn" onclick="switchAuthTab('login')" class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-300 bg-indigo-600 text-white shadow-lg">Login</button>
+        <button id="tabSignupBtn" onclick="switchAuthTab('signup')" class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-300 text-gray-400">Sign Up</button>
+      </div>
+      <!-- Message -->
+      <div id="authMsg" class="hidden mb-3 px-3 py-2 rounded-lg text-xs font-medium text-center"></div>
+      <!-- Name (signup only) -->
+      <div id="nameField" class="hidden mb-3">
+        <input type="text" id="authName" placeholder="👤  আপনার নাম" class="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition-all duration-200" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15)" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'"/>
+      </div>
+      <!-- Email -->
+      <div class="mb-3">
+        <input type="email" id="authEmail" placeholder="✉️  আপনার Email" class="w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition-all duration-200" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15)" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'"/>
+      </div>
+      <!-- Password -->
+      <div class="mb-4 relative">
+        <input type="password" id="authPassword" placeholder="🔒  Password (কমপক্ষে ৬ অক্ষর)" class="w-full rounded-xl px-4 py-2.5 pr-10 text-sm text-white placeholder-gray-500 outline-none transition-all duration-200" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15)" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'"/>
+        <button type="button" onclick="toggleAuthPw()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-indigo-400 transition-colors text-sm">👁</button>
+      </div>
+      <!-- Submit -->
+      <button id="authSubmitBtn" onclick="submitEmailAuth()" class="w-full py-3 rounded-xl font-bold text-sm text-white active:scale-95 transition-all duration-200 relative overflow-hidden" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 4px 15px rgba(79,70,229,0.4)">
+        <span id="authBtnText">Login</span>
+        <div id="authBtnLoader" class="hidden absolute inset-0 flex items-center justify-center" style="background:rgba(79,70,229,0.95)">
+          <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        </div>
+                                                                                                                              </button>
         </div>
     </div>
 
@@ -4625,5 +4658,64 @@
             initSlider(passwordLength);
         });
     </script>
+    <script>
+var _am='login';
+function switchAuthTab(m){
+  _am=m;
+  var s=m==='signup';
+  document.getElementById('tabLoginBtn').className='flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-300 '+(s?'text-gray-400':'bg-indigo-600 text-white shadow-lg');
+  document.getElementById('tabSignupBtn').className='flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-300 '+(s?'bg-indigo-600 text-white shadow-lg':'text-gray-400');
+  document.getElementById('nameField').className=s?'mb-3':'hidden mb-3';
+  document.getElementById('authBtnText').textContent=s?'Sign Up':'Login';
+  clrMsg();
+}
+function toggleAuthPw(){
+  var i=document.getElementById('authPassword');
+  i.type=i.type==='password'?'text':'password';
+}
+async function submitEmailAuth(){
+  var e=document.getElementById('authEmail').value.trim();
+  var p=document.getElementById('authPassword').value;
+  var n=(document.getElementById('authName')||{}).value||'';
+  if(!e||!p){shMsg('Email ও Password দিন','e');return;}
+  if(p.length<6){shMsg('Password কমপক্ষে ৬ অক্ষর','e');return;}
+  var b=document.getElementById('authSubmitBtn');
+  var l=document.getElementById('authBtnLoader');
+  b.disabled=true;l.classList.remove('hidden');clrMsg();
+  try{
+    var r=await fetch('/api/auth?action='+_am,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:e,password:p,name:n})
+    });
+    var d=await r.json();
+    if(!r.ok){shMsg(d.error||'Error','e');return;}
+    shMsg(_am==='signup'?'✅ Account তৈরি হয়েছে!':'✅ Login সফল!','s');
+    setTimeout(function(){
+      document.getElementById('loginScreen').classList.add('hidden-screen');
+    },900);
+  }catch(x){shMsg('Network error','e');}
+  finally{b.disabled=false;l.classList.add('hidden');}
+}
+function shMsg(t,tp){
+  var el=document.getElementById('authMsg');
+  el.textContent=t;
+  el.style.background=tp==='e'?'rgba(239,68,68,0.2)':'rgba(34,197,94,0.2)';
+  el.style.color=tp==='e'?'#fca5a5':'#86efac';
+  el.style.border=tp==='e'?'1px solid rgba(239,68,68,0.3)':'1px solid rgba(34,197,94,0.3)';
+  el.className='mb-3 px-3 py-2 rounded-lg text-xs font-medium text-center';
+}
+function clrMsg(){
+  var el=document.getElementById('authMsg');
+  el.className='hidden mb-3 px-3 py-2 rounded-lg text-xs font-medium text-center';
+  el.style='';
+}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Enter'){
+    var ls=document.getElementById('loginScreen');
+    if(ls&&!ls.classList.contains('hidden-screen'))submitEmailAuth();
+  }
+});
+</script>
 </body>
 </html>
