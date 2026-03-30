@@ -1,0 +1,11 @@
+{
+  "name": "passgen-pro",
+  "version": "1.0.0",
+  "description": "PassGen Pro - Advanced Password Generator",
+  "dependencies": {
+    "pg": "^8.11.0"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}
